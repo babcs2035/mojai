@@ -1,0 +1,125 @@
+# 手書き文書デジタル化・復元プラットフォーム
+# タスクランナー設定 (mise)
+
+[env]
+# プロジェクトルートディレクトリ
+PROJECT_ROOT = "{{ config_root }}"
+# データディレクトリ
+DATA_DIR = "{{ config_root }}/data"
+# モデルディレクトリ
+MODELS_DIR = "{{ config_root }}/data/models"
+
+[tools]
+# Python バージョン指定
+python = "3.12"
+
+[tasks.setup]
+description = "環境構築: Python仮想環境の作成と依存関係のインストール"
+run = """
+#!/usr/bin/env bash
+set -euo pipefail
+
+echo "📦 依存関係をインストール中..."
+uv venv
+. .venv/bin/activate
+uv sync
+
+echo "📁 データディレクトリを作成中..."
+mkdir -p data/input data/output data/models
+
+echo "✅ 環境構築が完了しました"
+echo ""
+echo "次のステップ:"
+echo "  mise run download-models  # 学習済みモデルのダウンロード"
+echo "  mise run ocr <input>      # OCR処理の実行"
+"""
+
+[tasks.download-models]
+description = "学習済みモデルのダウンロード (PaddleOCR, FontDiffuser)"
+run = """
+#!/usr/bin/env bash
+set -euo pipefail
+
+echo "📥 モデルをダウンロード中..."
+uv run python scripts/download_models.py
+
+echo "✅ モデルのダウンロードが完了しました"
+"""
+
+[tasks.ocr]
+description = "OCR処理の実行: 画像から文字を認識"
+run = """
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [ $# -eq 0 ]; then
+    echo "使用方法: mise run ocr <input_path>"
+    echo "  <input_path>: 入力画像ファイルまたはディレクトリ"
+    exit 1
+fi
+
+uv run python -m src.load.pipeline "$@"
+"""
+
+[tasks.verify]
+description = "TUI検証インターフェースの起動: OCR結果の確認と修正"
+run = """
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [ $# -eq 0 ]; then
+    echo "使用方法: mise run verify <json_path>"
+    echo "  <json_path>: OCR結果のJSONファイル"
+    exit 1
+fi
+
+uv run python -m src.verify.app "$@"
+"""
+
+[tasks.generate]
+description = "フォント生成: スタイル参照画像から全文字を生成"
+run = """
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [ $# -lt 2 ]; then
+    echo "使用方法: mise run generate <style_ref> <output>"
+    echo "  <style_ref>: スタイル参照画像"
+    echo "  <output>: 出力フォントファイルパス (.ttf/.otf)"
+    exit 1
+fi
+
+uv run python -m src.generate.pipeline "$@"
+"""
+
+[tasks.test]
+description = "テストの実行"
+run = "uv run pytest tests/ -v"
+
+[tasks.lint]
+description = "コード品質チェック"
+run = """
+#!/usr/bin/env bash
+set -euo pipefail
+
+echo "🔍 Ruffでコードをチェック中..."
+uv run ruff check src/ tests/
+
+echo "🎨 Ruffでフォーマットをチェック中..."
+uv run ruff format --check src/ tests/
+
+echo "✅ コード品質チェックが完了しました"
+"""
+
+[tasks.format]
+description = "コードフォーマット"
+run = """
+#!/usr/bin/env bash
+set -euo pipefail
+
+echo "🎨 コードをフォーマット中..."
+uv run ruff format src/ tests/
+uv run ruff check --fix src/ tests/
+
+echo "✅ フォーマットが完了しました"
+"""

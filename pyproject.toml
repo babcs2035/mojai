@@ -1,0 +1,103 @@
+[project]
+name = "mojai"
+version = "0.1.0"
+description = "手書き文書デジタル化・復元プラットフォーム - CUIベースの高速検証フローと拡散モデルによるワンショットフォント生成"
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+authors = [{ name = "mojai-dev" }]
+keywords = ["ocr", "handwriting", "font-generation", "diffusion-models", "paddleocr"]
+
+dependencies = [
+    # ===== Core: 共通依存関係 =====
+    "numpy>=1.24.0",
+    "pillow>=10.0.0",
+    "opencv-python>=4.8.0",
+    # ===== Core A: load (IARE - 知的取得・認識エンジン) =====
+    # PaddleOCR関連
+    "paddleocr>=2.7.0",
+    "paddlepaddle>=2.5.0", # GPU版は環境に応じて paddlepaddle-gpu に変更
+    # ===== Core B: verify (TBIV - ターミナルベース検証インターフェース) =====
+    # TUI関連
+    "textual>=0.40.0",
+    "rich>=13.0.0",
+    "term-image>=0.7.0",
+    # ===== Core C: generate (GSTR - 生成的スタイル転写・復元モジュール) =====
+    # PyTorch / 拡散モデル
+    "torch>=2.1.0",
+    "torchvision>=0.16.0",
+    "diffusers>=0.24.0",
+    "transformers>=4.35.0",
+    "accelerate>=0.24.0",
+    # フォント生成
+    "fonttools>=4.45.0",
+    "ufoLib2>=0.16.0",
+    # ===== ユーティリティ =====
+    "click>=8.1.0",
+    "pydantic>=2.5.0",
+    "pydantic-settings>=2.1.0",
+    "tqdm>=4.66.0",
+    "pytest>=9.0.2",
+]
+
+[project.optional-dependencies]
+# GPU環境用 (CUDA 12.x)
+gpu = [
+    "paddlepaddle-gpu",
+]
+
+# 開発用
+dev = [
+    "pytest>=7.4.0",
+    "pytest-cov>=4.1.0",
+    "ruff>=0.1.0",
+    "mypy>=1.7.0",
+]
+
+[project.scripts]
+# CLIエントリポイント
+mojai-ocr = "src.load.pipeline:main"
+mojai-verify = "src.verify.app:main"
+mojai-generate = "src.generate.pipeline:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src"]
+
+# ===== Ruff設定 =====
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # Pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "C4",  # flake8-comprehensions
+    "UP",  # pyupgrade
+]
+ignore = [
+    "E501",  # line too long (handled by formatter)
+]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+# ===== Pytest設定 =====
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+# ===== MyPy設定 =====
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = true
