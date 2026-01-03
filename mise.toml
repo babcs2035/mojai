@@ -31,7 +31,7 @@ echo "✅ 環境構築が完了しました"
 echo ""
 echo "次のステップ:"
 echo "  mise run download-models  # 学習済みモデルのダウンロード"
-echo "  mise run ocr <input>      # OCR処理の実行"
+echo "  mise run ocr              # OCR処理の実行"
 """
 
 [tasks.download-models]
@@ -47,33 +47,12 @@ echo "✅ モデルのダウンロードが完了しました"
 """
 
 [tasks.ocr]
-description = "OCR処理の実行: 画像から文字を認識"
+description = "📝 OCR処理: 画像 → 文字分割 → HTMLレポート生成"
 run = """
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [ $# -eq 0 ]; then
-    echo "使用方法: mise run ocr <input_path>"
-    echo "  <input_path>: 入力画像ファイルまたはディレクトリ"
-    exit 1
-fi
-
-uv run python -m src.load.pipeline "$@"
-"""
-
-[tasks.verify]
-description = "TUI検証インターフェースの起動: OCR結果の確認と修正"
-run = """
-#!/usr/bin/env bash
-set -euo pipefail
-
-if [ $# -eq 0 ]; then
-    echo "使用方法: mise run verify <json_path>"
-    echo "  <json_path>: OCR結果のJSONファイル"
-    exit 1
-fi
-
-uv run python -m src.verify.app "$@"
+uv run python -m src.ocr
 """
 
 [tasks.generate]

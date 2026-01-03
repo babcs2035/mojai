@@ -34,10 +34,10 @@ mise run download-models
 
 ```bash
 # 画像ファイルを処理
-mise run ocr data/input/sample.jpg
+mise run load data/input/sample.jpg
 
 # ディレクトリ内の全画像を処理
-mise run ocr data/input/
+mise run load data/input/
 ```
 
 ### 検証インターフェース

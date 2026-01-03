@@ -14,9 +14,11 @@ dependencies = [
     "pillow>=10.0.0",
     "opencv-python>=4.8.0",
     # ===== Core A: load (IARE - 知的取得・認識エンジン) =====
-    # PaddleOCR関連
-    "paddleocr>=2.7.0",
-    "paddlepaddle>=2.5.0", # GPU版は環境に応じて paddlepaddle-gpu に変更
+    # PaddleOCR (高精度日本語手書きOCR)
+    "paddlepaddle>=2.6.0",
+    "paddleocr>=2.8.0",
+    # manga-ocr (日本語特化OCR) - フォールバック用
+    "manga-ocr>=0.1.11",
     # ===== Core B: verify (TBIV - ターミナルベース検証インターフェース) =====
     # TUI関連
     "textual>=0.40.0",
@@ -27,7 +29,7 @@ dependencies = [
     "torch>=2.1.0",
     "torchvision>=0.16.0",
     "diffusers>=0.24.0",
-    "transformers>=4.35.0",
+    "transformers<=4.49.0",
     "accelerate>=0.24.0",
     # フォント生成
     "fonttools>=4.45.0",
@@ -38,14 +40,22 @@ dependencies = [
     "pydantic-settings>=2.1.0",
     "tqdm>=4.66.0",
     "pytest>=9.0.2",
+    "opencv-python-headless>=4.11.0.86",
+    "craft-text-detector>=0.4.1",
+    "bitsandbytes>=0.49.0",
+    "sentencepiece>=0.2.1",
+    "einops>=0.8.1",
+    "timm>=1.0.22",
+    "segment-anything-py>=1.0.1",
+    "scikit-learn>=1.8.0",
+    "scipy>=1.16.3",
+    "scikit-image>=0.26.0",
+    "ftfy>=6.3.1",
+    "regex>=2025.11.3",
+    "open-clip-torch>=3.2.0",
 ]
 
 [project.optional-dependencies]
-# GPU環境用 (CUDA 12.x)
-gpu = [
-    "paddlepaddle-gpu",
-]
-
 # 開発用
 dev = [
     "pytest>=7.4.0",

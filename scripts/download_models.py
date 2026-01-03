@@ -161,25 +161,47 @@ def _show_potrace_install_instructions() -> None:
     click.echo("   - Windows: https://potrace.sourceforge.net/")
 
 
+def download_sam_model() -> None:
+    """SAM (vit_b) モデルを直接ダウンロード"""
+    click.echo("📥 SAM (vit_b) モデルをダウンロード中...")
+
+    models_dir = settings.models_dir
+    models_dir.mkdir(parents=True, exist_ok=True)
+    sam_path = models_dir / "sam_vit_b.pth"
+
+    if sam_path.exists():
+        click.echo(f"✅ SAM モデル既存: {sam_path}")
+        return
+
+    url = "https://dl.fbaipublicfiles.com/segment_anything/sam_vit_b_01ec64.pth"
+    try:
+        click.echo(f"   URL: {url}")
+        urllib.request.urlretrieve(url, sam_path)
+        click.echo(f"✅ SAM モデルダウンロード完了: {sam_path}")
+    except Exception as e:
+        click.echo(f"⚠️ SAM モデルダウンロード失敗: {e}")
+
+
 @click.command()
 @click.option("--paddleocr", is_flag=True, help="PaddleOCRモデルのみダウンロード")
 @click.option("--fontdiffuser", is_flag=True, help="FontDiffuserモデルのみダウンロード")
+@click.option("--sam", is_flag=True, help="SAMモデルのみダウンロード")
 @click.option("--fonts", is_flag=True, help="フォントのみダウンロード")
 @click.option("--check", is_flag=True, help="依存ツールのインストール確認のみ")
-def main(paddleocr: bool, fontdiffuser: bool, fonts: bool, check: bool) -> None:
+def main(paddleocr: bool, fontdiffuser: bool, sam: bool, fonts: bool, check: bool) -> None:
     """
     学習済みモデルをダウンロード
-
-    オプション指定なしの場合は全てをダウンロードします。
     """
-    # モデルディレクトリを作成
     settings.models_dir.mkdir(parents=True, exist_ok=True)
 
     if check:
         download_potrace()
         return
 
-    download_all = not (paddleocr or fontdiffuser or fonts)
+    download_all = not (paddleocr or fontdiffuser or sam or fonts)
+
+    if download_all or sam:
+        download_sam_model()
 
     if download_all or paddleocr:
         download_paddleocr_models()
