@@ -1,17 +1,18 @@
 """
-共通設定モジュール
+共通設定モジュール．
 
-アプリケーション全体で使用する設定を管理する。
-環境変数や設定ファイルから値を読み込む。
+アプリケーション全体で使用する設定を管理する．
+環境変数や設定ファイルから値を読み込む．
 """
 
 from pathlib import Path
+
 from pydantic import ConfigDict
 from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
-    """アプリケーション設定"""
+    """アプリケーション設定を保持するクラス．"""
 
     model_config = ConfigDict(
         env_prefix="MOJAI_",
@@ -26,23 +27,18 @@ class Settings(BaseSettings):
     input_dir: Path = data_dir / "input"
     output_dir: Path = data_dir / "output"
 
-    # ===== OCR設定 (Core A: load) =====
-    ocr_lang: str = "japan"  # PaddleOCR言語設定 (PaddleOCR v3.xでGPUは自動検出)
-    ocr_det_model_dir: Path | None = None  # 検出モデルディレクトリ
-    ocr_rec_model_dir: Path | None = None  # 認識モデルディレクトリ
-
-    # ===== TUI設定 (Core B: verify) =====
+    # ===== TUI 設定 (Core B: verify) =====
     tui_image_protocol: str = "auto"  # auto, sixel, kitty, block
 
     # ===== 生成設定 (Core C: generate) =====
-    diffuser_model_path: Path | None = None  # FontDiffuserモデルパス
-    diffuser_use_fp16: bool = True  # FP16推論
-    diffuser_batch_size: int = 32  # バッチサイズ
-    diffuser_num_inference_steps: int = 25  # 推論ステップ数
+    diffuser_model_path: Path | None = None  # FontDiffuser モデルパス
+    diffuser_use_fp16: bool = True  # FP16 推論を有効化
+    diffuser_batch_size: int = 32  # 一括処理のバッチサイズ
+    diffuser_num_inference_steps: int = 25  # 推論のステップ数
 
-    # ===== GPU設定 =====
-    cuda_device: int = 0  # 使用するCUDAデバイス
+    # ===== GPU 設定 =====
+    cuda_device: int = 0  # 使用する CUDA デバイスの ID
 
 
-# シングルトンインスタンス
+# シングルトンインスタンスとして公開
 settings = Settings()

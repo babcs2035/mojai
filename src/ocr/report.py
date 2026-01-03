@@ -1,69 +1,118 @@
 """
-レポート生成モジュール
+レポート生成モジュール．
 
-HTMLレポートの生成を担当する。
+OCR の認識結果，抽出された文字画像，および算出された確信度をまとめ，
+ブラウザで閲覧可能な HTML レポートを動的に構築する．
 """
 
 from pathlib import Path
 
 
 class ReportGenerator:
-    """HTMLレポート生成"""
+    """
+    HTML レポート生成クラス．
+
+    解析結果の JSON データを入力として受け取り，CSS で装飾された視覚的なレポートを作成する．
+    """
 
     def __init__(self, output_dir: Path):
+        """
+        レポートジェネレータを初期化する．
+
+        Args:
+            output_dir (Path): レポートおよび関連アセットが保存されるディレクトリ．
+        """
         self.output_dir = output_dir
 
     def generate(self, data: dict) -> Path:
-        """HTMLレポートを生成"""
+        """
+        解析情報を元に HTML ファイルを生成する．
+
+        Args:
+            data (dict): 解析結果のメタデータおよび各文字の情報の辞書．
+
+        Returns:
+            Path: 生成された report.html の絶対パス．
+        """
+        # HTML 骨格およびスタイルの定義
         html_parts = [
             "<!DOCTYPE html>",
             "<html lang='ja'>",
             "<head>",
             "  <meta charset='UTF-8'>",
             "  <meta name='viewport' content='width=device-width, initial-scale=1.0'>",
-            "  <title>OCR Result Report</title>",
+            "  <title>mojai OCR Analysis Report</title>",
             "  <style>",
+            "    /* プロジェクトのイメージカラーに基づいたダークテーマを採用 */",
             "    * { box-sizing: border-box; margin: 0; padding: 0; }",
             "    body { font-family: 'Helvetica Neue', Arial, sans-serif; background: #1a1a2e; color: #eee; padding: 20px; }",
             "    h1 { text-align: center; margin-bottom: 20px; color: #00d4ff; }",
-            "    .meta { background: #16213e; padding: 15px; border-radius: 8px; margin-bottom: 20px; }",
+            "    .meta { background: #16213e; padding: 15px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #1f4068; }",
             "    .meta p { margin: 5px 0; }",
             "    .chars { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }",
-            "    .char { background: #0f3460; border-radius: 8px; padding: 10px; text-align: center; min-width: 60px; }",
-            "    .char img { max-height: 50px; border: 1px solid #333; background: #fff; display: block; margin: 0 auto; }",
-            "    .char-label { margin-top: 5px; font-size: 18px; color: #00d4ff; }",
-            "    .char-index { font-size: 10px; color: #666; }",
-            "    .summary { text-align: center; margin-top: 20px; color: #888; }",
+            "    /* 各文字をカード形式で表示 */",
+            "    .char { background: #0f3460; border-radius: 8px; padding: 10px; text-align: center; min-width: 65px; border: 1px solid #16213e; }",
+            "    .char img { max-height: 50px; border: 1px solid #333; background: #fff; display: block; margin: 0 auto; border-radius: 4px; }",
+            "    .char-label { margin-top: 5px; font-size: 18px; color: #00d4ff; font-weight: bold; }",
+            "    .char-index { font-size: 10px; color: #888; margin-top: 2px; }",
+            "    .char-conf { font-weight: bold; }",
+            "    .summary { text-align: center; margin-top: 20px; color: #888; font-size: 12px; }",
             "  </style>",
             "</head>",
             "<body>",
-            "  <h1>📝 OCR Result Report</h1>",
+            "  <h1>📝 mojai OCR Analysis Report</h1>",
             "  <div class='meta'>",
-            f"    <p><strong>Source:</strong> {data['source_path']}</p>",
-            f"    <p><strong>Characters:</strong> {data['metadata']['total_characters']}</p>",
-            f"    <p><strong>Detector:</strong> {data['metadata'].get('detector', 'N/A')}</p>",
+            f"    <p><strong>Source File:</strong> {data['source_path']}</p>",
+            f"    <p><strong>Total Characters:</strong> {data['metadata']['total_characters']}</p>",
+            f"    <p><strong>OCR Engine:</strong> {data['metadata'].get('detector', 'N/A')}</p>",
+            f"    <p><strong>Total Accuracy:</strong> {data['metadata'].get('accuracy', 0.0):.1%}</p>",
             "  </div>",
             "  <div class='chars'>",
         ]
 
+        # 各文字のデータカードを構築
         for char in data.get("characters", []):
             img_path = char.get("image_path", "")
+            confidence = char.get("confidence", 0.0)
+
+            # 確信度に基づいた視覚的なフィードバック（信号機色）
+            # 90% 以上は安全，80% 未満は確認推奨として色分けする
+            if confidence >= 0.9:
+                conf_color = "#4caf50"  # 緑（高信頼）
+            elif confidence >= 0.8:
+                conf_color = "#ffeb3b"  # 黄（中信頼）
+            else:
+                conf_color = "#f44336"  # 赤（低信頼）
+
+            conf_percent = f"{confidence:.1%}"
+
             html_parts.append("    <div class='char'>")
+            # 抽出された文字画像の埋め込み
             if img_path:
                 html_parts.append(f"      <img src='{img_path}' alt='{char['text']}'>")
+
+            # 認識結果（アノテーション）の表示
             html_parts.append(f"      <div class='char-label'>{char['text']}</div>")
-            html_parts.append(f"      <div class='char-index'>#{char['index']}</div>")
+            # 認識されたインデックス（通し番号）
+            html_parts.append(f"      <div class='char-index'>ID: {char['index']}</div>")
+            # 確信度の表示
+            html_parts.append(
+                f"      <div class='char-conf' style='color: {conf_color}; font-size: 12px; margin-top: 2px;'>{conf_percent}</div>"
+            )
             html_parts.append("    </div>")
 
+        # フッターの追加
         html_parts.extend(
             [
                 "  </div>",
-                "  <div class='summary'>Report generated successfully</div>",
+                "  <div class='summary'>Generated by mojai platform</div>",
                 "</body>",
                 "</html>",
             ]
         )
 
+        # ファイルへの書き出し
         report_path = self.output_dir / "report.html"
         report_path.write_text("\n".join(html_parts), encoding="utf-8")
+
         return report_path

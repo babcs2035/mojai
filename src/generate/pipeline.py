@@ -1,19 +1,14 @@
 """
-フォント生成パイプライン
+フォント生成パイプラインモジュール．
 
-スタイル参照画像からフォントファイルを生成する
-一連の処理を統合したパイプライン。
-
-処理フロー:
-1. スタイル参照画像の読み込み
-2. 生成対象文字リストの作成
-3. FontDiffuserによる文字画像生成
-4. フォントファイルの構築
+スタイル参照画像（手書き文字）から，拡散モデル（FontDiffuser）を用いて
+一連のグリフ画像を生成し，最終的なフォントファイル（TrueType）として構築する．
 """
 
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 
 import click
@@ -23,9 +18,7 @@ from tqdm import tqdm
 from src.generate.diffuser import FontDiffuserWrapper
 from src.generate.font_builder import FontBuilder, FontMetadata
 
-
-# 文字セット定義
-# 常用漢字 (一部) + ひらがな + カタカナ + 基本記号
+# 標準的な文字セット定義（日本語常用漢字，仮名，アルファベット，記号類）
 DEFAULT_CHARSETS = {
     "hiragana": (
         "あいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやゆよらりるれろわをん"
@@ -34,15 +27,15 @@ DEFAULT_CHARSETS = {
     ),
     "katakana": (
         "アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲン"
-        "ガギグゲゴザジズゼゾダヂヅデドバビブベボパピプペポ"
+        "ガギグゲゴザジズゼゾタチヅデドバビブベボパピプペポ"
         "ァィゥェォッャュョー"
     ),
     "basic_kanji": "一二三四五六七八九十百千万円年月日時分秒",
     "common_kanji": (
-        # 教育漢字（小学1年生）
+        # 小学校第一学年で学習する漢字
         "一右雨円王音下火花貝学気九休玉金空月犬見五口校左三山子四糸字耳七車手十出女小上森人水正生青夕石赤千川先早"
         "草足村大男竹中虫町天田土二日入年白八百文木本名目立力林六"
-        # 教育漢字（小学2年生の一部）
+        # 小学校第二学年で学習する漢字の一部
         "引羽雲園遠何科夏家歌画回会海絵外角楽活間丸岩顔汽記帰弓牛魚京強教近兄形計元言原戸古午後語工公広交光考行高黄合"
         "谷国黒今才細作算止市矢姉思紙寺自時室社弱首秋週春書少場色食心新親図数西声星晴切雪船線前組走多太体台地池知茶昼"
     ),
@@ -56,10 +49,9 @@ DEFAULT_CHARSETS = {
 
 class GenerationPipeline:
     """
-    フォント生成パイプライン
+    フォント生成を一括制御するパイプラインクラス．
 
-    Core C (generate) の統合エントリポイント。
-    スタイル参照画像 → 文字画像生成 → フォントファイル出力
+    拡散モデルによるスタイル転送と，フォントファイル構造へのパッキングを統合する．
     """
 
     def __init__(
@@ -68,37 +60,41 @@ class GenerationPipeline:
         font_builder: FontBuilder | None = None,
     ):
         """
-        パイプラインを初期化
+        生成パイプラインを初期化する．
 
         Args:
-            diffuser: FontDiffuserラッパー
-            font_builder: フォントビルダー
+            diffuser (FontDiffuserWrapper, optional): グリフ生成用エンジンのインスタンス．
+            font_builder (FontBuilder, optional): フォント構築エンジンのインスタンス．
         """
+        # 未指定時は各コンポーネントのデフォルト構成で初期化する
         self.diffuser = diffuser or FontDiffuserWrapper()
         self.font_builder = font_builder or FontBuilder()
 
     def get_charset(self, charset_name: str | None = None) -> str:
         """
-        文字セットを取得
+        指定された名前あるいはファイルに基づいて，対象となる文字セットを取得する．
 
         Args:
-            charset_name: 文字セット名 ("hiragana", "katakana", "basic_kanji", "all", None)
+            charset_name (str, optional): 文字セット名，パス，あるいは直接の文字列．
 
         Returns:
-            対象文字の文字列
+            str: 生成対象となる全文字が含まれる文字列．
         """
+        # 全ての定義済み文字セットを統合
         if charset_name is None or charset_name == "all":
             return "".join(DEFAULT_CHARSETS.values())
 
+        # 定義済みのセット名から検索
         if charset_name in DEFAULT_CHARSETS:
             return DEFAULT_CHARSETS[charset_name]
 
-        # ファイルからの読み込み
+        # 外部ファイルからの読み込み試行
         charset_path = Path(charset_name)
         if charset_path.exists():
             return charset_path.read_text(encoding="utf-8").strip()
 
-        return charset_name  # 直接文字列として解釈
+        # いずれにも当てはまらない場合は，引数自体を文字リストとして解釈
+        return charset_name
 
     def generate_font(
         self,
@@ -109,65 +105,66 @@ class GenerationPipeline:
         save_intermediates: bool = False,
     ) -> Path:
         """
-        スタイル参照画像からフォントを生成
+        手書きスタイル参照を元に，指定されたフォントファイルを生成する．
 
         Args:
-            style_image: スタイル参照画像 (1文字の手書き画像)
-            output_path: 出力フォントファイルパス (.ttf/.otf)
-            charset: 生成する文字セット
-            font_name: フォント名
-            save_intermediates: 中間ファイル(文字画像)を保存するか
+            style_image: 参照となるスタイル画像（一文字分）．
+            output_path: 出力先ファイルパス（.ttf または .otf）．
+            charset: 生成対象とする文字セット．
+            font_name: フォントの内部名称．
+            save_intermediates: 生成された中間画像（PNG）を個別に保存するかどうか．
 
         Returns:
-            生成されたフォントファイルのパス
+            Path: 生成されたフォントファイルのパス．
         """
         output_path = Path(output_path)
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
-        # 文字セットを取得
+        # 文字リストの確定
         target_chars = list(self.get_charset(charset))
-        click.echo(f"📝 生成対象: {len(target_chars)} 文字")
+        print(f"📝 Target: {len(target_chars)} characters to generate")
 
-        # スタイル特徴量を抽出
-        click.echo("🎨 スタイルを抽出中...")
+        # スタイル特徴量の抽出
+        print("🎨 Extracting handwriting style from reference...")
         style_features = self.diffuser.extract_style(style_image)
 
-        # 文字画像を生成
-        click.echo("✨ 文字を生成中...")
+        # 全文字のグリフ画像を連続生成
+        print("✨ Generating glyph images using diffusion model...")
         generated_images = []
 
-        # プログレスバー付きで生成
+        # バッチ処理による効率的な生成
         batch_size = self.diffuser.config.batch_size
-        for i in tqdm(range(0, len(target_chars), batch_size), desc="生成中"):
+        for i in tqdm(range(0, len(target_chars), batch_size), desc="  Processing batches"):
             batch_chars = target_chars[i : i + batch_size]
             batch_images = self.diffuser.generate(style_features, batch_chars)
             generated_images.extend(batch_images)
 
-        # 中間ファイルを保存
+        # 中間解析用としての画像保存
         if save_intermediates:
-            intermediate_dir = output_path.parent / f"{output_path.stem}_chars"
+            intermediate_dir = output_path.parent / f"{output_path.stem}_intermediates"
             intermediate_dir.mkdir(exist_ok=True)
 
             for char, img in zip(target_chars, generated_images, strict=True):
+                # ユニコードコードポイントに基づいたファイル名で保存
                 img_path = intermediate_dir / f"U+{ord(char):04X}_{char}.png"
                 img.save(img_path)
 
-            click.echo(f"📁 中間ファイル保存先: {intermediate_dir}")
+            print(f"📁 Intermediate glyph images saved to: {intermediate_dir}")
 
-        # フォントビルダーを設定
+        # フォント構築エンジンの設定
         self.font_builder.metadata = FontMetadata(
             family_name=font_name,
             style_name="Regular",
         )
 
-        # グリフを追加
-        click.echo("📦 フォントを構築中...")
+        # 各文字画像の TrueType グリフへの変換と登録
+        print("📦 Assembling font file fragments...")
         for char, img in zip(target_chars, generated_images, strict=True):
             self.font_builder.add_glyph(char, img)
 
-        # フォントを生成
+        # ファイル書き出し
         font_path = self.font_builder.build(output_path)
-        click.echo(f"✅ フォント生成完了: {font_path}")
+        print(f"✅ Success: Font file created at {font_path}")
 
         return font_path
 
@@ -179,40 +176,45 @@ class GenerationPipeline:
         font_name: str = "MojaiFont",
     ) -> Path:
         """
-        検証結果JSONからアンカー画像を取得してフォントを生成
+        OCR 解析後の JSON データから，スタイル参照として指定された文字を抽出してフォントを生成する．
 
         Args:
-            json_path: OCR結果のJSONファイル (is_style_anchor=Trueの文字を使用)
-            output_path: 出力フォントファイルパス
-            charset: 生成する文字セット
-            font_name: フォント名
+            json_path: OCR 解析結果を含む JSON ファイルへのパス．
+            output_path: 生成フォントの保存先パス．
+            charset: 生成対象文字セット．
+            font_name: フォント名称．
 
         Returns:
-            生成されたフォントファイルのパス
+            Path: 生成されたフォントファイルのパス．
         """
         json_path = Path(json_path)
 
-        # JSONを読み込み
+        # 解析データの読み込み
         with open(json_path, encoding="utf-8") as f:
             data = json.load(f)
 
-        # アンカー画像を探索
+        # 「スタイル参照（アンカー）」フラグが付与された文字画像を探索
         anchor_images: list[Path] = []
         base_dir = json_path.parent
 
+        # 階層構造に従って走査し，存在する画像ファイルのみを対象とする
         for line in data.get("lines", []):
             for char in line.get("characters", []):
                 if char.get("is_style_anchor", False):
-                    img_path = base_dir / char.get("image_path", "")
+                    img_name = char.get("image_path", "")
+                    img_path = base_dir / img_name
                     if img_path.exists():
                         anchor_images.append(img_path)
 
+        # 参照画像が一つも見つからない場合はエラー
         if not anchor_images:
-            raise ValueError("アンカー画像が見つかりません。検証フェーズでスタイル参照を選択してください。")
+            raise ValueError(
+                "No style anchor images found. Please select reference characters in verify phase."
+            )
 
-        click.echo(f"🔍 アンカー画像: {len(anchor_images)} 個")
+        print(f"🔍 Found {len(anchor_images)} style reference(s)")
 
-        # 最初のアンカー画像を使用 (将来的には複数アンカーの統合も検討)
+        # 最初の候補を参照元として採用する
         return self.generate_font(
             style_image=anchor_images[0],
             output_path=output_path,
@@ -221,7 +223,7 @@ class GenerationPipeline:
         )
 
     def release(self) -> None:
-        """GPUメモリを解放"""
+        """GPU リソースを明示的に解放する．"""
         self.diffuser.release()
 
 
@@ -232,18 +234,18 @@ class GenerationPipeline:
     "--charset",
     "-c",
     default="hiragana",
-    help="文字セット (hiragana, katakana, basic_kanji, all, またはファイルパス)",
+    help="Target characters (hiragana, katakana, all, or file path)",
 )
 @click.option(
     "--name",
     "-n",
     default="MojaiFont",
-    help="フォント名",
+    help="Internal font name",
 )
 @click.option(
     "--save-images",
     is_flag=True,
-    help="中間ファイル(文字画像)を保存",
+    help="Save intermediate glyph PNG files",
 )
 def main(
     style_ref: str,
@@ -253,10 +255,10 @@ def main(
     save_images: bool,
 ) -> None:
     """
-    フォントを生成
+    スタイル参照からフォントを生成する CLI ツール．
 
-    STYLE_REF: スタイル参照画像 (1文字の手書き画像) またはOCR結果JSON
-    OUTPUT: 出力フォントファイルパス (.ttf/.otf)
+    STYLE_REF: スタイル参照画像（一文字）または OCR 解析結果の JSON．
+    OUTPUT: 出力先フォントパス (.ttf)．
     """
     pipeline = GenerationPipeline()
 
@@ -264,7 +266,7 @@ def main(
         style_path = Path(style_ref)
 
         if style_path.suffix == ".json":
-            # JSONからアンカー画像を取得
+            # JSON 形式の場合はアンカー情報の抽出フローへ
             pipeline.generate_from_anchors(
                 json_path=style_path,
                 output_path=output,
@@ -272,7 +274,7 @@ def main(
                 font_name=name,
             )
         else:
-            # 画像を直接使用
+            # 画像ファイルの場合は直接生成フローへ
             pipeline.generate_font(
                 style_image=style_path,
                 output_path=output,
@@ -281,6 +283,9 @@ def main(
                 save_intermediates=save_images,
             )
 
+    except Exception as e:
+        print(f"❌ Critical error: {e}")
+        sys.exit(1)
     finally:
         pipeline.release()
 
